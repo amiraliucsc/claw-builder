@@ -13,6 +13,102 @@ provider "aws" {
   region = var.aws_region
 }
 
+# --- Locals ---
+
+locals {
+  agents_map = { for a in var.agents : a.id => a }
+  ssm_prefix = "/${var.project_name}"
+
+  openclaw_config = jsonencode({
+    gateway = {
+      port = 8080
+      mode = "local"
+      auth = {
+        token = "__OPENCLAW_AUTH_TOKEN__"
+      }
+    }
+    models = {
+      providers = {
+        amazon-bedrock = {
+          baseUrl = "https://bedrock-runtime.${var.aws_region}.amazonaws.com"
+          auth    = "aws-sdk"
+          api     = "bedrock-converse-stream"
+          models = [
+            {
+              id        = "us.anthropic.claude-sonnet-4-6"
+              name      = "Claude Sonnet 4.6"
+              maxTokens = 8192
+            },
+            {
+              id        = "us.anthropic.claude-opus-4-6-v1"
+              name      = "Claude Opus 4.6"
+              reasoning = true
+              maxTokens = 8192
+            },
+            {
+              id        = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+              name      = "Claude Haiku 4.5"
+              maxTokens = 4096
+            }
+          ]
+        }
+      }
+    }
+    agents = {
+      defaults = {
+        model = {
+          primary   = "amazon-bedrock/us.anthropic.claude-sonnet-4-6"
+          fallbacks = ["amazon-bedrock/us.anthropic.claude-haiku-4-5-20251001-v1:0"]
+        }
+      }
+      list = [for i, a in var.agents : merge(
+        { id = a.id },
+        i == 0 ? {} : {
+          name      = a.name
+          workspace = "/home/openclaw/.openclaw/workspace-${a.id}"
+          model     = "amazon-bedrock/us.anthropic.claude-sonnet-4-6"
+        }
+      )]
+    }
+    channels = {
+      telegram = {
+        enabled = true
+        accounts = { for a in var.agents : a.name => {
+          botToken  = "__TELEGRAM_BOT_TOKEN_${a.id}__"
+          dmPolicy  = "pairing"
+          allowFrom = ["tg:${tostring(a.telegram_user_id)}"]
+        } }
+      }
+    }
+    bindings = [for a in var.agents : {
+      type    = "route"
+      agentId = a.id
+      match = {
+        channel   = "telegram"
+        accountId = a.name
+      }
+    }]
+    tools = {
+      web = {
+        search = {
+          provider = "tavily"
+        }
+      }
+      memorySearch = {
+        enabled     = true
+        provider    = "gemini"
+        directories = ["memory"]
+      }
+    }
+    memory = {
+      enabled             = true
+      autoFlush           = true
+      softThresholdTokens = 40000
+      directories         = ["memory"]
+    }
+  })
+}
+
 # --- Data Sources ---
 
 data "aws_ami" "ubuntu" {
@@ -128,7 +224,7 @@ resource "aws_security_group" "instance" {
   }
 }
 
-# --- IAM Role (SSM Session Manager access) ---
+# --- IAM Role ---
 
 resource "aws_iam_role" "instance" {
   name = "${var.project_name}-ec2-role"
@@ -156,9 +252,87 @@ resource "aws_iam_role_policy_attachment" "ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy" "openclaw" {
+  name = "${var.project_name}-openclaw"
+  role = aws_iam_role.instance.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "BedrockInvoke"
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:ListFoundationModels"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "SSMGetParameters"
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+          "ssm:GetParametersByPath"
+        ]
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter${local.ssm_prefix}/*"
+      },
+      {
+        Sid    = "KMSDecrypt"
+        Effect = "Allow"
+        Action = ["kms:Decrypt"]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "ssm.${var.aws_region}.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
 resource "aws_iam_instance_profile" "instance" {
   name = "${var.project_name}-instance-profile"
   role = aws_iam_role.instance.name
+}
+
+# --- SSM Parameter Store (secrets) ---
+
+resource "aws_ssm_parameter" "telegram_bot_token" {
+  for_each = local.agents_map
+
+  name  = "${local.ssm_prefix}/agents/${each.key}/telegram_bot_token"
+  type  = "SecureString"
+  value = var.telegram_bot_tokens[each.key]
+
+  tags = { Name = var.project_name }
+}
+
+resource "aws_ssm_parameter" "gemini_api_key" {
+  name  = "${local.ssm_prefix}/gemini_api_key"
+  type  = "SecureString"
+  value = var.gemini_api_key
+
+  tags = { Name = var.project_name }
+}
+
+resource "aws_ssm_parameter" "tavily_api_key" {
+  name  = "${local.ssm_prefix}/tavily_api_key"
+  type  = "SecureString"
+  value = var.tavily_api_key
+
+  tags = { Name = var.project_name }
+}
+
+resource "aws_ssm_parameter" "openclaw_auth_token" {
+  name  = "${local.ssm_prefix}/openclaw_auth_token"
+  type  = "SecureString"
+  value = var.openclaw_auth_token != "" ? var.openclaw_auth_token : "auto"
+
+  tags = { Name = var.project_name }
 }
 
 # --- SSH Key Pair ---
@@ -191,8 +365,15 @@ resource "aws_instance" "main" {
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
-    swap_size_gb = var.swap_size_gb
+    swap_size_gb    = var.swap_size_gb
+    project_name    = var.project_name
+    aws_region      = var.aws_region
+    ssm_prefix      = local.ssm_prefix
+    openclaw_config = local.openclaw_config
+    agents          = var.agents
   })
+
+  user_data_replace_on_change = true
 
   tags = {
     Name      = "${var.project_name}-instance"

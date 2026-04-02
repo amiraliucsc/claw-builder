@@ -50,3 +50,54 @@ variable "swap_size_gb" {
   type        = number
   default     = 2
 }
+
+# --- OpenClaw ---
+
+variable "agents" {
+  description = "List of OpenClaw agents. Each gets its own Telegram bot, workspace, and user binding."
+  type = list(object({
+    id               = string
+    name             = string
+    telegram_user_id = number
+  }))
+
+  validation {
+    condition     = length(var.agents) > 0
+    error_message = "At least one agent must be defined."
+  }
+
+  validation {
+    condition     = length(var.agents) == length(distinct([for a in var.agents : a.id]))
+    error_message = "Agent IDs must be unique."
+  }
+
+  validation {
+    condition     = alltrue([for a in var.agents : can(regex("^[a-z][a-z0-9_]*$", a.id))])
+    error_message = "Agent IDs must start with a lowercase letter and contain only lowercase letters, digits, and underscores."
+  }
+}
+
+variable "telegram_bot_tokens" {
+  description = "Map of agent ID to Telegram bot token. Must have an entry for each agent."
+  type        = map(string)
+  sensitive   = true
+}
+
+variable "gemini_api_key" {
+  description = "Google Gemini API key for memory/embeddings"
+  type        = string
+  sensitive   = true
+}
+
+variable "tavily_api_key" {
+  description = "Tavily API key for web search"
+  type        = string
+  sensitive   = true
+}
+
+variable "openclaw_auth_token" {
+  description = "OpenClaw gateway auth token (leave empty to auto-generate at boot)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

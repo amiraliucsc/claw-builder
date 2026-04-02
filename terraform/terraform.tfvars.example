@@ -1,0 +1,41 @@
+# --- Required: SSH ---
+ssh_public_key = "ssh-rsa AAAA... user@host"
+
+# --- Required: OpenClaw Agents ---
+# Each agent gets its own Telegram bot, workspace, and user binding.
+# The first agent uses the default workspace; additional agents get workspace-<id>.
+# Agent IDs must be lowercase alphanumeric + underscores, starting with a letter.
+agents = [
+  {
+    id               = "main"
+    name             = "jeeves"
+    telegram_user_id = 12345678
+  },
+  {
+    id               = "assistant"
+    name             = "heevie"
+    telegram_user_id = 87654321
+  },
+]
+
+# Bot tokens keyed by agent ID (must match agent IDs above)
+telegram_bot_tokens = {
+  main      = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+  assistant = "0987654321:ZYXwvuTSRqpoNMLkjiHGFedcba"
+}
+
+# --- Required: API Keys ---
+gemini_api_key = "AIza..."
+tavily_api_key = "tvly-..."
+
+# Leave empty to auto-generate a random 64-char hex token at boot
+openclaw_auth_token = ""
+
+# --- Optional (showing defaults) ---
+# aws_region        = "us-west-2"
+# project_name      = "claw"
+# instance_type     = "t3.small"
+# root_volume_size  = 30
+# swap_size_gb      = 2
+# allowed_ssh_cidrs = ["1.2.3.4/32"]
+# ssh_key_name      = "open-claw"
