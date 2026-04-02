@@ -94,17 +94,6 @@ locals {
           provider = "tavily"
         }
       }
-      memorySearch = {
-        enabled     = true
-        provider    = "gemini"
-        directories = ["memory"]
-      }
-    }
-    memory = {
-      enabled             = true
-      autoFlush           = true
-      softThresholdTokens = 40000
-      directories         = ["memory"]
     }
   })
 }
@@ -365,12 +354,13 @@ resource "aws_instance" "main" {
   }
 
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
-    swap_size_gb    = var.swap_size_gb
-    project_name    = var.project_name
-    aws_region      = var.aws_region
-    ssm_prefix      = local.ssm_prefix
-    openclaw_config = local.openclaw_config
-    agents          = var.agents
+    swap_size_gb     = var.swap_size_gb
+    project_name     = var.project_name
+    aws_region       = var.aws_region
+    ssm_prefix       = local.ssm_prefix
+    openclaw_config  = local.openclaw_config
+    openclaw_version = var.openclaw_version
+    agents           = var.agents
   })
 
   user_data_replace_on_change = true

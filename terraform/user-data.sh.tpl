@@ -44,7 +44,7 @@ if ! command -v aws &>/dev/null; then
 fi
 
 # --- Install OpenClaw ---
-npm install -g openclaw
+npm install -g openclaw@${openclaw_version}
 
 # --- Create service user ---
 useradd -r -m -s /bin/bash openclaw || true
@@ -81,8 +81,6 @@ AGENT_TOKEN_${agent.id}=$(aws ssm get-parameter \
   --name "$PREFIX/agents/${agent.id}/telegram_bot_token" \
   --with-decryption --region "$REGION" --query 'Parameter.Value' --output text)
 CONFIG=$(echo "$CONFIG" | jq --arg tok "$AGENT_TOKEN_${agent.id}" \
-  '(.channels.telegram.accounts | to_entries[] | select(.value.botToken == "__TELEGRAM_BOT_TOKEN_${agent.id}__")).value.botToken |= $tok' \
-  | jq --arg tok "$AGENT_TOKEN_${agent.id}" \
   'walk(if type == "string" and . == "__TELEGRAM_BOT_TOKEN_${agent.id}__" then $tok else . end)')
 %{ endfor ~}
 

@@ -53,6 +53,12 @@ variable "swap_size_gb" {
 
 # --- OpenClaw ---
 
+variable "openclaw_version" {
+  description = "OpenClaw npm package version to install (e.g. 2026.4.1)"
+  type        = string
+  default     = "2026.4.1"
+}
+
 variable "agents" {
   description = "List of OpenClaw agents. Each gets its own Telegram bot, workspace, and user binding."
   type = list(object({

@@ -32,6 +32,7 @@ tavily_api_key = "tvly-..."
 openclaw_auth_token = ""
 
 # --- Optional (showing defaults) ---
+# openclaw_version  = "2026.4.1"
 # aws_region        = "us-west-2"
 # project_name      = "claw"
 # instance_type     = "t3.small"
