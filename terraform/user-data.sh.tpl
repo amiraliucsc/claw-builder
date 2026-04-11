@@ -71,9 +71,9 @@ fi
 # --- Build openclaw.json (replace secret placeholders) ---
 CONFIG='${openclaw_config}'
 
-# Replace auth token placeholder
-CONFIG=$(echo "$CONFIG" | jq --arg tok "$AUTH_TOKEN" \
-  '.gateway.auth.token = $tok')
+# Replace auth token and public IP placeholders
+CONFIG=$(echo "$CONFIG" | jq --arg tok "$AUTH_TOKEN" --arg ip "${public_ip}" \
+  '.gateway.auth.token = $tok | walk(if type == "string" and . == "https://__PUBLIC_IP__" then "https://" + $ip else . end)')
 
 # Fetch per-agent bot tokens from SSM and replace placeholders
 %{ for agent in agents ~}

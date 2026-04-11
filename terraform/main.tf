@@ -26,6 +26,9 @@ locals {
       auth = {
         token = "__OPENCLAW_AUTH_TOKEN__"
       }
+      controlUi = {
+        allowedOrigins = ["https://__PUBLIC_IP__"]
+      }
     }
     models = {
       providers = {
@@ -360,6 +363,7 @@ resource "aws_instance" "main" {
     ssm_prefix       = local.ssm_prefix
     openclaw_config  = local.openclaw_config
     openclaw_version = var.openclaw_version
+    public_ip        = aws_eip.main.public_ip
     agents           = var.agents
   })
 
