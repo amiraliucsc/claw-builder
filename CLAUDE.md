@@ -72,12 +72,26 @@ SSM parameter hierarchy: `/<project_name>/gemini_api_key`, `/<project_name>/agen
 - `user_data_replace_on_change = true` — changing agents or config triggers instance replacement
 - Design for destroy/recreate — all state lives in SSM + Terraform, not on the instance
 
-## Verified Working
+## Current Deployment Status
 
 - OpenClaw 2026.4.1 on t3.small, us-west-2
+- Static IP: Elastic IP (persists across instance replacements)
+- One agent deployed: "Sally" (agent ID: `main`)
 - Bedrock models: Claude Sonnet 4.6, Opus 4.6, Haiku 4.5
 - Telegram bot connected and responding
 - Nginx HTTPS reverse proxy returning 200
+- Control UI accessible at `https://<EIP>` with auto-generated auth token
+- `controlUi.allowedOrigins` automatically set to the Elastic IP
+- Auth token is auto-generated at boot if `openclaw_auth_token` is left empty in tfvars (changes on every instance rebuild)
+
+## Gotchas / Lessons Learned
+
+- OpenClaw 2026.4.1 does NOT recognize `memorySearch` in tools or `autoFlush`/`directories`/`enabled`/`softThresholdTokens` in memory config — these cause the gateway to crash with "Config invalid"
+- The `gateway.mode` must be `"local"` or the gateway refuses to start
+- `npm install -g openclaw` must run as root, not as the openclaw user
+- jq `to_entries[] |= ` path expressions don't work for in-place updates on object values — use `walk` instead for placeholder replacement
+- EC2 host key changes on every instance replacement — SSH will warn about MITM; clear with `ssh-keygen -R <ip>`
+- Terraform `sensitive = true` on a variable prevents using it in `for_each` — separate sensitive fields (tokens) from non-sensitive fields (IDs, names)
 
 ## Known Limitations / Future Work
 
@@ -86,4 +100,5 @@ SSM parameter hierarchy: `/<project_name>/gemini_api_key`, `/<project_name>/agen
 - No Hindsight memory server (would need Docker + EBS data volume + OpenAI key)
 - No proactive agent system (morning/evening briefings, alerts)
 - No Asana/Gmail/Calendar integrations
-- Memory config keys (`memorySearch`, `autoFlush`, etc.) were rejected by OpenClaw 2026.4.1 — investigate if newer versions support them
+- Auth token not persistent across rebuilds unless set explicitly in tfvars
+- Memory/embedding features not configured (Gemini key is deployed but not wired into OpenClaw config yet)
